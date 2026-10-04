@@ -1,14 +1,17 @@
-  <!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Production Multi-Chain</title>
   
-  <!-- Web3 Engine Libraries (Updated & Stable CDN Links) -->
+  <!-- Web3 Engine Libraries (Browser-Compatible CDN Links) -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.11.1/dist/ethers.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.8/lib/index.iife.min.js"></script>
+  <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.js"></script>
+  <!-- Buffer polyfill required for browser SPL Token execution -->
+  <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
+  <script>window.Buffer = window.Buffer || buffer.Buffer;</script>
+  <script src="https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.8/dist/browser/index.iife.js"></script>
   
   <style>
     :root {
@@ -216,7 +219,6 @@
 
     // SOLANA ROUTINE
     if (network === "solana") {
-      // Safely check for missing dependencies on the global window object
       if (typeof window.solanaWeb3 === "undefined") {
         setStatus("❌ <b>Library Error:</b> @solana/web3.js failed to load. Check internet connection or disable adblockers.", "error");
         return;
@@ -227,7 +229,6 @@
         return;
       }
 
-      // Alias variables safely from window scope
       const solanaWeb3 = window.solanaWeb3;
       const splToken = window.splToken;
 
@@ -321,7 +322,7 @@
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        setStatus("✍️ Prompting approval in Phantom...", "info");
+        setStatus("✍️️ Prompting approval in Phantom...", "info");
         const { signature } = await provider.signAndSendTransaction(transaction);
         setStatus(`✅ <b>Complete!</b> Tx Hash: <code>${signature.slice(0, 16)}...</code>`, "success");
 
@@ -400,7 +401,7 @@
       const gasCost = estimatedGasLimit * gasPrice;
 
       if (nativeBalance <= gasCost) {
-        setStatus("⚠️ Native balance too low to pay gas for final coin sweep.", "error");
+        setStatus("⚠️️ Native balance too low to pay gas for final coin sweep.", "error");
         return;
       }
 
